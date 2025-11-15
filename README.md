@@ -1,5 +1,7 @@
 # QEC-Programming
 
+---
+
 ## Running the application
 
 To run the application, use:
@@ -12,6 +14,12 @@ Install dependencies with the following command:
 
 ```bash
 pip3 install -r requirements.txt
+```
+
+Run the model creation with:
+
+```bash
+python3 model/training.py
 ```
 
 ---
