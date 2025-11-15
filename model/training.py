@@ -248,14 +248,14 @@ def forecast_future_occ_ratio(
 
         future_df = pd.DataFrame(rows)
 
-        # 4) Predict occ_ratio for this future step
+        # Predict occ_ratio for this future step
         X_future = future_df[FEATURE_COLS]
         y_hat = model.predict(X_future)
 
         future_df["occ_ratio_pred"] = y_hat
         all_forecasts.append(future_df)
 
-        # 5) Update history with predictions so later steps can use them as lags
+        # Update history with predictions so later steps can use them as lags
         for g, t, y in zip(
             future_df["grid"], future_df["datetime"], future_df["occ_ratio_pred"]
         ):
@@ -269,20 +269,20 @@ def forecast_future_occ_ratio(
 
 
 # Train model
-# pipe, mae_val = train_ev_grid_model(DATA_DIR, model_path="ev_grid_occ_ratio_model.joblib")
+pipe, mae_val = train_ev_grid_model(DATA_DIR, model_path="ev_grid_occ_ratio_model.joblib")
 
 # Evaluate model on hold-out period
-# test_df, y_test, y_pred = test_ev_grid_model("ev_grid_occ_ratio_model.joblib", DATA_DIR)
+test_df, y_test, y_pred = test_ev_grid_model("ev_grid_occ_ratio_model.joblib", DATA_DIR)
 
 # Plot for one grid over a selected date range
-# data.plot_grid_timeseries(
-#     test_df,
-#     y_test,
-#     y_pred,
-#     grid_id=102,
-#     start_date="2022-07-13",
-#     end_date="2022-07-19",
-# )
+data.plot_grid_timeseries(
+    test_df,
+    y_test,
+    y_pred,
+    grid_id=102,
+    start_date="2022-07-13",
+    end_date="2022-07-19",
+)
 
 forecast_df = forecast_future_occ_ratio(
         "ev_grid_occ_ratio_model.joblib",
@@ -293,7 +293,7 @@ forecast_df = forecast_future_occ_ratio(
 
 print(forecast_df.head())
 
-grid_102_forecast = forecast_df[forecast_df["grid"] == 102]
+grid_102_forecast = forecast_df[forecast_df["grid"] == 102] # Forecast grid 102
 grid_102_forecast.plot(x="datetime", y="occ_ratio_pred")
 
 data.plot_forecast_timeseries(forecast_df, grid_id=102)
