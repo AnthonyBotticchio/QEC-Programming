@@ -1,3 +1,7 @@
-# Ignore Python virtual environment
+# Folders to exclude
 venv/
 .vscode/
+
+# Files to exclude
+*.joblib
+.DS_Store
