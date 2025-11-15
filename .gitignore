@@ -1,6 +1,7 @@
 # Folders to exclude
 venv/
 .vscode/
+__pycache__/
 
 # Files to exclude
 *.joblib
