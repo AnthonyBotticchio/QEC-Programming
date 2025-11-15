@@ -21,13 +21,18 @@ st.markdown(
     .stApp {
         text-align: center;
     }
+    .main .block-container {
+        max-width: 1600px;
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
     iframe[title="st_folium"] {
         margin-left: auto !important;
         margin-right: auto !important;
         display: block;
         aspect-ratio: 16 / 9;
-        width: 90vw !important;
-        max-width: 1200px;
+        width: 100% !important;
+        max-width: 1500px;
     }
     </style>
     """,
@@ -154,7 +159,7 @@ def _add_sz_districts_overlay(m: folium.Map) -> None:
         pass
 
 # Folium map (single view, no sidebar toggles)
-m = folium.Map(location=[22.5431, 114.0579], zoom_start=11, tiles="CartoDB positron", control_scale=True)
+m = folium.Map(location=[22.5431, 114.0579], zoom_start=9, tiles="CartoDB positron", control_scale=True)
 
 # SZ districts overlay if available
 _add_sz_districts_overlay(m)
@@ -189,6 +194,4 @@ MeasureControl(position="topleft", primary_length_unit="meters", primary_area_un
 Fullscreen(position="topleft").add_to(m)
 folium.LayerControl(collapsed=False).add_to(m)
 
-_, center_col, _ = st.columns([1, 3, 1])
-with center_col:
-    st_folium(m, height=720, returned_objects=[])
+st_folium(m, height=720, width=1500, returned_objects=[])
