@@ -1,21 +1,22 @@
+import copy
+import glob
 import json
 import os
-import glob
 from typing import Optional
 
 import pandas as pd
 import streamlit as st
 
 try:
-    import geopandas as gpd  # optional
+    import geopandas as gpd  
 except Exception:
     gpd = None
 
-import folium  # type: ignore
-import pydeck as pdk  # type: ignore
+import folium 
+import pydeck as pdk  
 from branca.colormap import linear
-from folium.plugins import Draw, MeasureControl, Fullscreen  # type: ignore
-from streamlit_folium import st_folium  # type: ignore
+from folium.plugins import Draw, MeasureControl, Fullscreen  
+from streamlit_folium import st_folium  
 
 st.set_page_config(page_title="Shenzhen EV Map", layout="wide")
 st.markdown(
@@ -118,6 +119,35 @@ def load_district_geojson() -> Optional[dict]:
         return None
 
 
+def _prepare_geojson_with_values(
+    base_geojson: Optional[dict],
+    value_lookup: dict[int, float],
+    color_scale,
+) -> Optional[dict]:
+    if not base_geojson:
+        return None
+    prepared = copy.deepcopy(base_geojson)
+    for feature in prepared.get("features", []):
+        props = feature.setdefault("properties", {})
+        zone_raw = props.get("TAZID") or props.get("ZONE")
+        try:
+            zone_id = int(zone_raw) if zone_raw is not None else None
+        except (TypeError, ValueError):
+            zone_id = None
+        value = value_lookup.get(zone_id) if zone_id is not None else None
+        if value is not None and not pd.isna(value):
+            hex_color = color_scale(value)
+            rgba = _hex_to_rgba(hex_color, alpha=160)
+        else:
+            hex_color = "#d0d2d6"
+            rgba = _hex_to_rgba(hex_color, alpha=80)
+        props["zone_id"] = zone_id
+        props["occupancy"] = None if value is None else float(value)
+        props["fill_color_hex"] = hex_color
+        props["fill_color_rgba"] = rgba
+    return prepared
+
+
 metadata_df = load_station_metadata()
 occupancy_df = load_occupancy()
 time_lookup_df = load_time_lookup()
@@ -156,8 +186,12 @@ snapshot_df["occupancy"] = snapshot_df["occupancy"].astype(float)
 map_points = metadata_df.merge(snapshot_df, on="zone_id", how="inner")
 if map_points.empty:
     max_occupancy = 1.0
+    zone_value_lookup: dict[int, float] = {}
 else:
     max_occupancy = max(map_points["occupancy"].max(), 1.0)
+    zone_value_lookup = dict(
+        zip(map_points["zone_id"].astype(int), map_points["occupancy"].astype(float))
+    )
 color_scale = linear.YlOrRd_09.scale(0, max_occupancy)
 
 
@@ -165,73 +199,67 @@ def _hex_to_rgba(hex_color: str, alpha: int = 200) -> list[int]:
     hex_color = hex_color.lstrip("#")
     return [int(hex_color[i : i + 2], 16) for i in (0, 2, 4)] + [alpha]
 
-
-if not map_points.empty:
-    map_points["color_rgba"] = map_points["occupancy"].apply(
-        lambda value: _hex_to_rgba(color_scale(value))
-    )
-    map_points["radius_m"] = 150 + (map_points["occupancy"] / max_occupancy) * 600
-
 smooth_mode = st.toggle(
     "Smooth WebGL map (beta)",
     value=True,
     help="Uses a WebGL map for faster color updates. Disable to access Folium drawing controls.",
 )
-dots_geojson = load_district_geojson() if smooth_mode else None
+base_geojson = load_district_geojson()
+choropleth_geojson = _prepare_geojson_with_values(
+    base_geojson, zone_value_lookup, color_scale
+)
 
-def _add_sz_districts_overlay(m: folium.Map) -> None:
-    src = _find_sz_districts()
-    if not src:
+def _add_sz_districts_overlay(m: folium.Map, geojson_data: Optional[dict]) -> None:
+    if not geojson_data:
+        src = _find_sz_districts()
+        if not src:
+            return
+        folium.GeoJson(src, name="SZ_districts").add_to(m)
         return
-    try:
-        if gpd is not None:
-            gdf = gpd.read_file(src)  # type: ignore
-            if not gdf.empty:
-                gdf = gdf.to_crs(4326) if gdf.crs and gdf.crs.to_epsg() != 4326 else gdf
-                gj = folium.GeoJson(
-                    data=gdf.to_json(),
-                    name="SZ_districts",
-                    style_function=lambda f: {"fillColor": "#3388ff40", "color": "#3388ff", "weight": 1},
-                    tooltip=folium.GeoJsonTooltip(fields=[c for c in gdf.columns if c != "geometry"][:8])
-                )
-                gj.add_to(m)
-        else:
-            # Fallback: try to pass raw file
-            folium.GeoJson(src, name="SZ_districts").add_to(m)
-    except Exception:
-        pass
+
+    def style_fn(feature):
+        return {
+            "fillColor": feature["properties"].get("fill_color_hex", "#cccccc"),
+            "color": "#1E3A5F",
+            "weight": 1,
+            "fillOpacity": 0.7,
+        }
+
+    tooltip = folium.GeoJsonTooltip(
+        fields=["zone_id", "occupancy"],
+        aliases=["Zone", "Occupancy"],
+        localize=True,
+        sticky=False,
+    )
+    folium.GeoJson(
+        data=geojson_data,
+        style_function=style_fn,
+        highlight_function=lambda feat: {
+            "weight": 2,
+            "color": "#ff9800",
+        },
+        tooltip=tooltip,
+        name="SZ districts",
+    ).add_to(m)
 
 
-def _render_pydeck_map(points_df: pd.DataFrame, district_geojson: Optional[dict]) -> None:
-    if points_df.empty:
-        st.warning("No station metadata matched the occupancy columns.")
+def _render_pydeck_map(district_geojson: Optional[dict]) -> None:
+    if not district_geojson or not district_geojson.get("features"):
+        st.warning("District polygons unavailable for smooth rendering.")
         return
 
     layers = [
         pdk.Layer(
-            "ScatterplotLayer",
-            data=points_df,
-            get_position="[longitude, latitude]",
-            get_fill_color="color_rgba",
-            get_radius="radius_m",
+            "GeoJsonLayer",
+            data=district_geojson,
+            stroked=True,
+            filled=True,
+            get_fill_color="properties.fill_color_rgba",
+            get_line_color=[40, 40, 40, 120],
+            line_width_min_pixels=1.2,
             pickable=True,
-            radius_min_pixels=4,
-            radius_max_pixels=60,
-            auto_highlight=True,
         )
     ]
-
-    if district_geojson:
-        layers.append(
-            pdk.Layer(
-                "GeoJsonLayer",
-                data=district_geojson,
-                stroked=True,
-                filled=False,
-                get_line_color=[0, 122, 255, 200],
-                line_width_min_pixels=1.5,
-            )
-        )
 
     deck = pdk.Deck(
         map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
@@ -244,12 +272,12 @@ def _render_pydeck_map(points_df: pd.DataFrame, district_geojson: Optional[dict]
             pitch=0,
         ),
         layers=layers,
-        tooltip={"text": "Zone {zone_id}\nOccupancy: {occupancy}\nChargers: {count}"},
+        tooltip={"text": "Zone {properties.zone_id}\nOccupancy: {properties.occupancy}"},
     )
     st.pydeck_chart(deck, use_container_width=True, height=720)
 
 if smooth_mode:
-    _render_pydeck_map(map_points, dots_geojson)
+    _render_pydeck_map(choropleth_geojson)
 else:
     # Folium map (single view, no sidebar toggles)
     m = folium.Map(
@@ -271,7 +299,7 @@ else:
         m.fit_bounds(bounds)
 
     # SZ districts overlay if available
-    _add_sz_districts_overlay(m)
+    _add_sz_districts_overlay(m, choropleth_geojson)
 
     # Occupancy markers
     if map_points.empty:
