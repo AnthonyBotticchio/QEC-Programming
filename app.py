@@ -22,17 +22,21 @@ st.markdown(
         text-align: center;
     }
     .main .block-container {
-        max-width: 1600px;
-        padding-left: 1rem;
-        padding-right: 1rem;
+        max-width: 100%;
+        width: 100%;
+        padding-left: 0;
+        padding-right: 0;
     }
-    iframe[title="st_folium"] {
-        margin-left: auto !important;
-        margin-right: auto !important;
-        display: block;
+    .map-wrapper {
+        display: flex;
+        justify-content: center;
+        width: 100%;
+        overflow-x: auto;
+    }
+    .map-wrapper iframe[title="st_folium"] {
+        width: min(100vw, 1900px) !important;
         aspect-ratio: 16 / 9;
-        width: 100% !important;
-        max-width: 1500px;
+        min-width: 900px;
     }
     </style>
     """,
@@ -160,6 +164,17 @@ def _add_sz_districts_overlay(m: folium.Map) -> None:
 
 # Folium map (single view, no sidebar toggles)
 m = folium.Map(location=[22.5431, 114.0579], zoom_start=9, tiles="CartoDB positron", control_scale=True)
+if not metadata_df.empty:
+    lat_min = float(metadata_df["latitude"].min())
+    lat_max = float(metadata_df["latitude"].max())
+    lon_min = float(metadata_df["longitude"].min())
+    lon_max = float(metadata_df["longitude"].max())
+    padding = 0.05
+    bounds = [
+        [lat_min - padding, lon_min - padding],
+        [lat_max + padding, lon_max + padding],
+    ]
+    m.fit_bounds(bounds)
 
 # SZ districts overlay if available
 _add_sz_districts_overlay(m)
@@ -194,4 +209,7 @@ MeasureControl(position="topleft", primary_length_unit="meters", primary_area_un
 Fullscreen(position="topleft").add_to(m)
 folium.LayerControl(collapsed=False).add_to(m)
 
-st_folium(m, height=720, width=1500, returned_objects=[])
+with st.container():
+    st.markdown('<div class="map-wrapper">', unsafe_allow_html=True)
+    st_folium(m, height=720, width=None, returned_objects=[])
+    st.markdown('</div>', unsafe_allow_html=True)
