@@ -1,7 +1,4 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
-import pydeck as pdk
 import os
 import glob
 from typing import Optional
@@ -13,17 +10,28 @@ except Exception:
 
 from streamlit_folium import st_folium  # type: ignore
 import folium  # type: ignore
-from folium.plugins import HeatMap, Draw, MeasureControl, Fullscreen  # type: ignore
+from folium.plugins import Draw, MeasureControl, Fullscreen  # type: ignore
 
-with st.sidebar:
-    map_only = st.toggle("Map-only mode", value=False)
-    use_folium = st.toggle("Advanced map (Folium)", value=False, help="Enable drawing, measuring, base layers, and GeoJSON overlays.")
-
-#st.write("Streamlit has lots of fans in the geo community. 🌍 It supports maps from PyDeck, Folium, Kepler.gl, and others.")
-
-chart_data = pd.DataFrame(
-   np.random.randn(1000, 2) / [50, 50] + [22.5431, 114.0579],
-   columns=['lat', 'lon'])
+st.set_page_config(page_title="Shenzhen EV Map", layout="wide")
+st.markdown(
+    """
+    <style>
+    .stApp {
+        text-align: center;
+    }
+    iframe[title="st_folium"] {
+        margin-left: auto !important;
+        margin-right: auto !important;
+        display: block;
+        aspect-ratio: 16 / 9;
+        width: 90vw !important;
+        max-width: 1200px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+st.markdown("<h2 style='text-align:center;margin-top:0;'>EV Charger Occupancy Predictor</h2>", unsafe_allow_html=True)
 
 def _find_sz_districts() -> Optional[str]:
     candidates = [
@@ -67,51 +75,18 @@ def _add_sz_districts_overlay(m: folium.Map) -> None:
     except Exception:
         pass
 
-if use_folium:
-    # Folium map with useful controls
-    m = folium.Map(location=[22.5431, 114.0579], zoom_start=11, tiles="CartoDB positron", control_scale=True)
+# Folium map (single view, no sidebar toggles)
+m = folium.Map(location=[22.5431, 114.0579], zoom_start=11, tiles="CartoDB positron", control_scale=True)
 
-    if not map_only:
-        # Heat layer from synthetic points
-        HeatMap(chart_data[["lat", "lon"]].values.tolist(), radius=25, blur=15, min_opacity=0.2).add_to(m)
-        # SZ districts overlay if available
-        _add_sz_districts_overlay(m)
+# SZ districts overlay if available
+_add_sz_districts_overlay(m)
 
-        # Helpful controls
-        Draw(export=False).add_to(m)
-        MeasureControl(position="topleft", primary_length_unit="meters", primary_area_unit="sqmeters").add_to(m)
-        Fullscreen(position="topleft").add_to(m)
-        folium.LayerControl(collapsed=False).add_to(m)
+# Helpful controls directly on the map
+Draw(export=False).add_to(m)
+MeasureControl(position="topleft", primary_length_unit="meters", primary_area_unit="sqmeters").add_to(m)
+Fullscreen(position="topleft").add_to(m)
+folium.LayerControl(collapsed=False).add_to(m)
 
-    st_folium(m, height=650, returned_objects=[])
-else:
-    map_layers = [
-        pdk.Layer(
-           'HexagonLayer',
-           data=chart_data,
-           get_position='[lon, lat]',
-           radius=200,
-           elevation_scale=4,
-           elevation_range=[0, 1000],
-           pickable=True,
-           extruded=True,
-        ),
-        pdk.Layer(
-            'ScatterplotLayer',
-            data=chart_data,
-            get_position='[lon, lat]',
-            get_color='[200, 30, 0, 160]',
-            get_radius=200,
-        ),
-    ]
-
-    st.pydeck_chart(pdk.Deck(
-        map_style=None,
-        initial_view_state=pdk.ViewState(
-            latitude=22.5431,
-            longitude=114.0579,
-            zoom=11,
-            pitch=50,
-        ),
-        layers=[] if map_only else map_layers,
-    ))
+_, center_col, _ = st.columns([1, 3, 1])
+with center_col:
+    st_folium(m, height=720, returned_objects=[])
