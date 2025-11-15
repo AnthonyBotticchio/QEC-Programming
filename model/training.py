@@ -269,20 +269,20 @@ def forecast_future_occ_ratio(
 
 
 # Train model
-# pipe, mae_val = train_ev_grid_model(DATA_DIR, model_path="ev_grid_occ_ratio_model.joblib")
+pipe, mae_val = train_ev_grid_model(DATA_DIR, model_path="ev_grid_occ_ratio_model.joblib")
 
 # Evaluate model on hold-out period
-# test_df, y_test, y_pred = test_ev_grid_model("ev_grid_occ_ratio_model.joblib", DATA_DIR)
+test_df, y_test, y_pred = test_ev_grid_model("ev_grid_occ_ratio_model.joblib", DATA_DIR)
 
 # Plot for one grid over a selected date range
-# data.plot_grid_timeseries(
-#     test_df,
-#     y_test,
-#     y_pred,
-#     grid_id=102,
-#     start_date="2022-07-13",
-#     end_date="2022-07-19",
-# )
+data.plot_grid_timeseries(
+    test_df,
+    y_test,
+    y_pred,
+    grid_id=102,
+    start_date="2022-07-13",
+    end_date="2022-07-19",
+)
 
 forecast_df = forecast_future_occ_ratio(
         "ev_grid_occ_ratio_model.joblib",
