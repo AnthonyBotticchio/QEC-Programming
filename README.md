@@ -1,8 +1,17 @@
 # QEC-Programming
 
+## Running the application
+
 To run the application, use:
-```
+
+```bash
 streamlit run app.py
+```
+
+Install dependencies with the following command:
+
+```bash
+pip3 install -r requirements.txt
 ```
 
 ---
