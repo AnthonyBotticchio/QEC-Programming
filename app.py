@@ -339,3 +339,15 @@ else:
         st.markdown('<div class="map-wrapper">', unsafe_allow_html=True)
         st_folium(m, height=720, width=None, returned_objects=[])
         st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("### Forecast visualization")
+if st.button("Predict future occupancy"):
+    image_path = "Figure_3.png"
+    if os.path.exists(image_path):
+        st.image(
+            image_path,
+            caption="Forecast of future occupancy ratio beyond the training window",
+            use_column_width=True,
+        )
+    else:
+        st.warning("Prediction plot image (Figure_3.png) is missing.")
