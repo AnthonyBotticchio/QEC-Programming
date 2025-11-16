@@ -2,15 +2,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import joblib
-from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.metrics import (
-    mean_absolute_error,
-    mean_squared_error,
-    r2_score,
-)
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+import lightgbm as lgb
 import data
 
 # Project paths
@@ -42,73 +34,48 @@ NUMERIC_FEATURES = [
 CATEGORICAL_FEATURES = ["grid"]
 FEATURE_COLS = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 
-def train_ev_grid_model(
-    data_dir: Path,
-    model_path: str = "ev_grid_occ_ratio_model.joblib",
-):
-    """
-    Train a Gradient Boosting model to predict occ_ratio per (time, grid),
-    using time features, grid attributes, and lagged occupancy.
-    """
-    # Load full dataset (all CSV files)
-    df = data.load_ev_grid_data(data_dir)
+def train_ev_grid_model_LGB(data_dir, model_path="ev_model.pkl"):
 
-    # Time-based split: first 80% train, last 20% validation. Great for testing
-    df_sorted = df.sort_values("datetime")
-    split_idx = int(len(df_sorted) * 0.8)
-    train_df = df_sorted.iloc[:split_idx]
-    val_df = df_sorted.iloc[split_idx:]
+    df = data.load_ev_grid_data(data_dir).sort_values("datetime")
+
+    # time split
+    timeSplit = int(len(df) * 0.8)
+    train_df = df.iloc[:timeSplit].copy()
+    val_df = df.iloc[timeSplit:].copy()
+
+    # dtype downcast
+    for col in NUMERIC_FEATURES:
+        train_df[col] = train_df[col].astype("float32")
+        val_df[col] = val_df[col].astype("float32")
+
+    train_df["grid"] = train_df["grid"].astype("int32")
+    val_df["grid"] = val_df["grid"].astype("int32")
 
     X_train = train_df[FEATURE_COLS]
     y_train = train_df[TARGET_COL]
     X_val = val_df[FEATURE_COLS]
     y_val = val_df[TARGET_COL]
 
-    # Preprocessing: scale numerics, one-hot encode categoricals
-    numeric_transformer = StandardScaler()
-    categorical_transformer = OneHotEncoder(handle_unknown="ignore")
-
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ("num", numeric_transformer, NUMERIC_FEATURES),
-            ("cat", categorical_transformer, CATEGORICAL_FEATURES),
-        ]
-    )
-
-    # Gradient Boosting model with a bit more capacity than defaults
-    model = GradientBoostingRegressor(
-        n_estimators=300,
-        max_depth=3,
+    model = lgb.LGBMRegressor(
+        n_estimators=2000,
         learning_rate=0.05,
+        num_leaves=64,
+        subsample=0.8,
+        colsample_bytree=0.8,
         random_state=42,
+        n_jobs=-1
     )
 
-    pipe = Pipeline(
-        steps=[
-            ("preprocess", preprocessor),
-            ("model", model),
-        ]
-    )
+    model.fit(X=X_train, y=y_train, eval_set=[(X_val, y_val)])
 
-    # Train
-    pipe.fit(X_train, y_train)
+    preds = model.predict(X_val)
 
-    # Validation performance
-    y_pred_val = pipe.predict(X_val)
-    mae = mean_absolute_error(y_val, y_pred_val)
-    rmse = np.sqrt(mean_squared_error(y_val, y_pred_val))
-    r2 = r2_score(y_val, y_pred_val)
+    print("MAE:", mean_absolute_error(y_val, preds))
+    print("RMSE:", np.sqrt(mean_squared_error(y_val, preds)))
 
-    print(f"Validation MAE (occ_ratio): {mae:.4f}")
-    print(f"Validation RMSE           : {rmse:.4f}")
-    print(f"Validation R²             : {r2:.4f}")
+    joblib.dump(model, model_path)
 
-    # Save model
-    joblib.dump(pipe, model_path)
-    print(f"Model saved to {model_path}")
-
-    return pipe, mae
-
+    return model
 
 def test_ev_grid_model(model_path: str, data_dir: Path):
     """
@@ -267,12 +234,11 @@ def forecast_future_occ_ratio(
     forecast_df = pd.concat(all_forecasts, ignore_index=True)
     return forecast_df
 
-
-# Train model
-pipe, mae_val = train_ev_grid_model(DATA_DIR, model_path="ev_grid_occ_ratio_model.joblib")
+# Train model using LightGBM
+model = train_ev_grid_model_LGB(data_dir=DATA_DIR, model_path="ev_grid_occ_ratio_model.joblib")
 
 # Evaluate model on hold-out period
-test_df, y_test, y_pred = test_ev_grid_model("ev_grid_occ_ratio_model.joblib", DATA_DIR)
+test_df, y_test, y_pred = test_ev_grid_model(model_path="ev_grid_occ_ratio_model.joblib", data_dir=DATA_DIR)
 
 # Plot for one grid over a selected date range
 data.plot_grid_timeseries(

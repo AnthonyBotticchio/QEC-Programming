@@ -6,7 +6,7 @@ import pandas as pd
 def load_ev_grid_data(data_dir: Union[str, Path]) -> pd.DataFrame:
     data_dir = Path(data_dir)
 
-    # Core CSV fiels
+    # Core CSV fields
     occ = pd.read_csv(data_dir / "occupancy.csv")      # timestamp + grid columns
     vol = pd.read_csv(data_dir / "volume.csv")         # timestamp + grid columns
     info = pd.read_csv(data_dir / "information.csv")   # one row per grid
